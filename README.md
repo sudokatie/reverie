@@ -37,63 +37,180 @@ Requires Python 3.11+ and either:
 
 ```bash
 # Start a new campaign
-reverie new
+reverie new --name "My Adventure" --character "Hero"
 
 # Continue your last game
 reverie continue
+
+# Load a specific save
+reverie load "My Adventure"
 
 # List all saves
 reverie list
 ```
 
-## How It Works
+## Gameplay
 
-1. **Create a character** - Pick a name, class, and distribute stat points
-2. **Explore** - Type actions like "look around" or "go to the tavern"
-3. **Talk** - Engage NPCs in conversation, make deals, gather info
-4. **Fight** - Combat is resolved through narrative actions and dice rolls
-5. **Quest** - Pick up quests from NPCs or stumble into adventure
+### Basic Commands
 
-The AI maintains consistency - NPCs remember you, the world persists, and your choices have consequences.
+Type natural actions or use system commands:
 
-## Commands
+```
+> look around
+You find yourself in a dusty tavern. Wooden beams creak overhead...
 
-In-game commands start with `/`:
+> talk to the bartender
+The bartender eyes you warily. "What'll it be, stranger?"
 
-- `/save` - Manual save
-- `/look` - Describe current location
-- `/inventory` - Show your stuff
-- `/character` - Show your stats
-- `/quests` - Show active quests
-- `/help` - Full command list
-- `/quit` - Exit game
+> go north
+You step out into the cold night air...
+
+> attack the goblin
+You swing your blade! [Roll: 17 + 2 = 19] Critical hit!
+```
+
+### System Commands
+
+- `look` - Describe current location
+- `go <direction>` - Move (north, south, east, west, up, down)
+- `talk <name>` - Talk to an NPC
+- `inventory` - Show your items and equipment
+- `stats` - View character stats
+- `quests` - Show active quests
+- `save` - Save the game
+- `help` - Show all commands
+- `quit` - Exit game
+
+### Keyboard Shortcuts (TUI)
+
+- `C` - Toggle character sheet
+- `I` - Toggle inventory
+- `Q` - Toggle quest log
+- `?` - Toggle help
+- `Ctrl+Q` - Quit
+
+## Character System
+
+### Stats
+
+Characters have three stats (12 points to distribute, max 6 each):
+
+- **Might** - Physical strength, combat prowess
+- **Wit** - Intelligence, perception, social cunning
+- **Spirit** - Willpower, magic, resilience
+
+### Classes
+
+- **Code Warrior** - Starts with a weapon bonus
+- **Meeting Survivor** - Extra endurance
+- **Inbox Knight** - Mental fortitude
+- **Wanderer** - Balanced, adaptable
+
+### Health
+
+Health is tracked as "Danger Level":
+- **Fresh** - Full health (3)
+- **Bloodied** - Wounded (2)
+- **Critical** - Near defeat (1)
+- **Defeated** - Out of action (0)
+
+## Combat
+
+Combat is narrative, not tactical. Describe what you do:
+
+```
+> attack the orc
+> dodge and counterattack
+> throw a fireball
+> retreat behind the pillar
+```
+
+The AI interprets your intent, rolls dice, and narrates the outcome.
+
+## World Generation
+
+The world generates as you explore. Each location has:
+- Description and atmosphere
+- Exits to connected areas
+- Hidden secrets (revealed through exploration)
+- NPCs with their own agendas
+
+## NPC System
+
+NPCs remember:
+- Previous conversations
+- Promises you've made (and broken)
+- Gifts you've given
+- Your reputation changes
+
+Their disposition ranges from Hostile to Allied based on your actions.
+
+## CLI Commands
+
+```
+reverie new [--name NAME] [--character NAME]   Start new campaign
+reverie continue                               Continue last campaign
+reverie load <save>                            Load specific save
+reverie list                                   List all saves
+reverie export <save> [-o FILE]                Export to JSON
+reverie import <file>                          Import from JSON
+reverie config                                 Show configuration
+reverie delete <save> [--force]                Delete a campaign
+```
 
 ## Configuration
 
-Config lives at `~/.config/reverie/config.toml`:
+Config file: `~/.config/reverie/config.toml`
 
 ```toml
 [llm]
-provider = "ollama"
-model = "llama3.1"
+provider = "ollama"         # or "openai"
+model = "llama3.1"          # model to use
+endpoint = "http://localhost:11434"
+timeout = 30
+
+[audio]
+enabled = false             # TTS narration (future)
 
 [gameplay]
-difficulty = "normal"
-auto_save = true
+auto_save = true            # save after each action
+difficulty = "normal"       # affects combat rolls
+verbose_rolls = false       # show dice math
 ```
 
-## Character Classes
+## Development
 
-- **Code Warrior** - +10 damage, for those who solve problems directly
-- **Meeting Survivor** - +20 HP, for those who endure
-- **Inbox Knight** - +10 focus, for those who stay sharp under pressure
-- **Wanderer** - Balanced stats, for those who adapt
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
 
-## The Fine Print
+# Run tests
+pytest
 
-This is a solo experience. You're the hero of your own story. The AI remembers what you do, tracks your reputation, and generates content based on your choices.
+# Run with coverage
+pytest --cov=reverie
 
-It's not perfect. Sometimes the AI hallucinates. Sometimes NPCs forget things. That's part of the charm - or the chaos, depending on your perspective.
+# Type checking
+mypy src/reverie
+```
+
+## Architecture
+
+```
+reverie/
+  cli.py          - Command-line interface (Typer)
+  config.py       - Configuration loading
+  character.py    - Character system
+  world.py        - World generation
+  npc.py          - NPC system
+  quest.py        - Quest system
+  combat.py       - Combat system
+  inventory.py    - Inventory management
+  game.py         - Game state and loop
+  llm/            - LLM integration (Ollama, OpenAI)
+  storage/        - SQLite persistence
+  ui/             - Terminal UI (Textual)
+```
 
 ## License
 
