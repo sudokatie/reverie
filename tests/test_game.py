@@ -8,11 +8,19 @@ from reverie.game import (
     GameState,
     HistoryEntry,
     EventType,
+    Game,
+    CommandType,
     create_game_state,
     add_to_history,
     get_context,
     save_state,
     load_state,
+    process_input,
+    handle_command,
+    handle_action,
+    handle_dialogue,
+    handle_combat_action,
+    check_triggers,
     _serialize_character,
     _deserialize_character,
 )
@@ -376,3 +384,141 @@ class TestCharacterSerialization:
         assert restored.level == sample_character.level
         assert restored.gold == sample_character.gold
         assert restored.equipment.weapon == sample_character.equipment.weapon
+
+
+# =============================================================================
+# Game Loop Tests (Task 12)
+# =============================================================================
+
+@pytest.fixture
+def sample_game(sample_campaign, sample_character, sample_location, test_db) -> Game:
+    """Create a sample game instance."""
+    state = create_game_state(sample_campaign, sample_character, sample_location)
+    return Game(state=state, db=test_db, llm=None)
+
+
+class TestProcessInput:
+    """Tests for process_input function."""
+    
+    def test_empty_input(self, sample_game):
+        """Test handling empty input."""
+        result = process_input(sample_game, "")
+        assert "what would you like to do" in result.lower()
+    
+    def test_command_with_slash(self, sample_game):
+        """Test command with slash prefix."""
+        result = process_input(sample_game, "/look")
+        assert sample_game.state.location.name in result
+    
+    def test_command_keyword(self, sample_game):
+        """Test command as keyword."""
+        result = process_input(sample_game, "inventory")
+        assert "inventory" in result.lower()
+    
+    def test_movement_direction(self, sample_game):
+        """Test movement by direction name."""
+        result = process_input(sample_game, "north")
+        # Either moves or says can't go
+        assert "north" in result.lower() or "can't go" in result.lower()
+
+
+class TestHandleCommand:
+    """Tests for handle_command function."""
+    
+    def test_look_command(self, sample_game):
+        """Test look command."""
+        result = handle_command(sample_game, "look")
+        assert sample_game.state.location.name in result
+    
+    def test_inventory_command(self, sample_game):
+        """Test inventory command."""
+        result = handle_command(sample_game, "inventory")
+        assert "inventory" in result.lower()
+        assert "gold" in result.lower()
+    
+    def test_stats_command(self, sample_game):
+        """Test stats command."""
+        result = handle_command(sample_game, "stats")
+        assert sample_game.state.character.name in result
+        assert "might" in result.lower()
+    
+    def test_help_command(self, sample_game):
+        """Test help command."""
+        result = handle_command(sample_game, "help")
+        assert "commands" in result.lower()
+    
+    def test_unknown_command(self, sample_game):
+        """Test unknown command."""
+        result = handle_command(sample_game, "xyzzy")
+        assert "unknown command" in result.lower()
+
+
+class TestHandleAction:
+    """Tests for handle_action function."""
+    
+    def test_action_adds_to_history(self, sample_game):
+        """Test that actions are logged to history."""
+        initial_count = len(sample_game.state.history)
+        handle_action(sample_game, "search the room")
+        
+        assert len(sample_game.state.history) > initial_count
+    
+    def test_action_without_llm(self, sample_game):
+        """Test action handling without LLM."""
+        result = handle_action(sample_game, "pick up the sword")
+        assert "pick up the sword" in result.lower()
+
+
+class TestHandleDialogue:
+    """Tests for handle_dialogue function."""
+    
+    def test_dialogue_logs_to_history(self, sample_game, sample_npc):
+        """Test that dialogue is logged."""
+        initial_count = len(sample_game.state.history)
+        handle_dialogue(sample_game, sample_npc, "Hello there!")
+        
+        assert len(sample_game.state.history) > initial_count
+    
+    def test_dialogue_returns_response(self, sample_game, sample_npc):
+        """Test that dialogue returns NPC response."""
+        result = handle_dialogue(sample_game, sample_npc, "What's your name?")
+        assert sample_npc.name in result
+
+
+class TestHandleCombatAction:
+    """Tests for handle_combat_action function."""
+    
+    def test_combat_action_not_in_combat(self, sample_game):
+        """Test combat action when not in combat."""
+        result = handle_combat_action(sample_game, "attack")
+        assert "not in combat" in result.lower()
+    
+    def test_combat_attack(self, sample_game):
+        """Test attack action in combat."""
+        # Set up combat
+        enemy = Enemy(id="1", name="Goblin")
+        sample_game.state.combat_state = CombatState(enemies=[enemy])
+        
+        result = handle_combat_action(sample_game, "attack")
+        assert "goblin" in result.lower()
+
+
+class TestCheckTriggers:
+    """Tests for check_triggers function."""
+    
+    def test_no_triggers(self, sample_game):
+        """Test when no triggers fire."""
+        triggers = check_triggers(sample_game)
+        # May or may not have triggers
+        assert isinstance(triggers, list)
+    
+    def test_level_up_trigger(self, sample_game):
+        """Test level up trigger."""
+        # Give enough XP to level up
+        sample_game.state.character.xp = 200  # Level 1 needs 100
+        sample_game.state.character.level = 1
+        
+        triggers = check_triggers(sample_game)
+        
+        assert any("level up" in t.lower() for t in triggers)
+        assert sample_game.state.character.level == 2

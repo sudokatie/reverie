@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Optional, Any
 from uuid import uuid4
 
+import re
 from .character import Character, Stats, Equipment, PlayerClass, DangerLevel as CharDangerLevel
 from .world import Location, WorldElement, ElementType
 from .npc import NPC, NPCMemory, Disposition
@@ -506,3 +507,610 @@ def _deserialize_character(data: dict) -> Character:
         xp=data.get("xp", 0),
         level=data.get("level", 1),
     )
+
+
+# =============================================================================
+# Game Loop (Task 12)
+# =============================================================================
+
+class CommandType:
+    """Command type constants."""
+    LOOK = "look"
+    GO = "go"
+    INVENTORY = "inventory"
+    STATS = "stats"
+    TALK = "talk"
+    HELP = "help"
+    QUIT = "quit"
+    QUESTS = "quests"
+    SAVE = "save"
+
+
+@dataclass
+class Game:
+    """Main game controller."""
+    state: GameState
+    db: Database
+    llm: Optional[Any] = None  # LLM client (typed as Any to avoid circular import)
+    
+    def run(self) -> None:
+        """Main game loop (for TUI integration)."""
+        # This is a placeholder - actual TUI integration in Task 13
+        pass
+
+
+def process_input(game: Game, user_input: str) -> str:
+    """Process player input and return response.
+    
+    Routes to appropriate handler based on game state
+    and input type (command vs action).
+    
+    Args:
+        game: The game instance
+        user_input: Raw input from player
+        
+    Returns:
+        Response text to display
+    """
+    user_input = user_input.strip()
+    
+    if not user_input:
+        return "What would you like to do?"
+    
+    # Check if in combat - combat actions take priority
+    if game.state.in_combat:
+        return handle_combat_action(game, user_input)
+    
+    # Check for commands (start with / or are keywords)
+    if user_input.startswith("/"):
+        return handle_command(game, user_input[1:])
+    
+    # Check for system commands as plain text
+    lower_input = user_input.lower()
+    command_keywords = [
+        "look", "inventory", "stats", "help", "quit", "quests", "save"
+    ]
+    if lower_input.split()[0] in command_keywords:
+        return handle_command(game, lower_input)
+    
+    # Check for movement
+    if lower_input.startswith("go ") or lower_input in ["north", "south", "east", "west", "up", "down"]:
+        direction = lower_input.replace("go ", "").strip()
+        return handle_movement(game, direction)
+    
+    # Check for talking to NPCs
+    if lower_input.startswith("talk to ") or lower_input.startswith("speak to "):
+        npc_name = re.sub(r"^(talk|speak) to ", "", lower_input)
+        return handle_dialogue_start(game, npc_name)
+    
+    # Default: treat as a free-form action
+    return handle_action(game, user_input)
+
+
+def handle_command(game: Game, command: str) -> str:
+    """Handle a system command.
+    
+    Commands are meta-actions like looking, checking inventory,
+    saving, or quitting.
+    
+    Args:
+        game: The game instance
+        command: Command text (without leading /)
+        
+    Returns:
+        Response text
+    """
+    parts = command.lower().split()
+    cmd = parts[0] if parts else ""
+    args = parts[1:] if len(parts) > 1 else []
+    
+    if cmd == CommandType.LOOK:
+        return _cmd_look(game)
+    elif cmd == CommandType.INVENTORY:
+        return _cmd_inventory(game)
+    elif cmd == CommandType.STATS:
+        return _cmd_stats(game)
+    elif cmd == CommandType.QUESTS:
+        return _cmd_quests(game)
+    elif cmd == CommandType.HELP:
+        return _cmd_help()
+    elif cmd == CommandType.SAVE:
+        return _cmd_save(game)
+    elif cmd == CommandType.QUIT:
+        return "Goodbye, adventurer!"
+    elif cmd == CommandType.GO and args:
+        return handle_movement(game, args[0])
+    elif cmd == CommandType.TALK and args:
+        npc_name = " ".join(args)
+        return handle_dialogue_start(game, npc_name)
+    else:
+        return f"Unknown command: {cmd}. Type 'help' for available commands."
+
+
+def handle_action(game: Game, action: str) -> str:
+    """Handle a free-form player action.
+    
+    Processes narrative actions using the LLM.
+    
+    Args:
+        game: The game instance
+        action: Player's described action
+        
+    Returns:
+        Narration response
+    """
+    # Log the action
+    add_to_history(
+        game.state,
+        EventType.PLAYER_ACTION,
+        action,
+    )
+    
+    # If no LLM, provide a simple response
+    if game.llm is None:
+        return f"You attempt to {action.lower()}..."
+    
+    # Build context and generate response
+    context = get_context(game.state)
+    prompt = f"""You are the dungeon master. The player attempts: "{action}"
+
+Context:
+- Location: {context['location']['name'] if context['location'] else 'Unknown'}
+- NPCs present: {', '.join(n['name'] for n in context['npcs_present']) or 'None'}
+
+Describe what happens in 2-3 sentences. Be creative but consistent with the world."""
+
+    try:
+        response = game.llm.generate(prompt)
+        add_to_history(game.state, EventType.NARRATION, response)
+        return response
+    except Exception:
+        return f"You attempt to {action.lower()}. The outcome is uncertain..."
+
+
+def handle_dialogue(game: Game, npc: NPC, player_input: str) -> str:
+    """Handle dialogue with an NPC.
+    
+    Args:
+        game: The game instance
+        npc: The NPC being spoken to
+        player_input: What the player says
+        
+    Returns:
+        NPC's response
+    """
+    # Log the conversation
+    add_to_history(
+        game.state,
+        EventType.NPC_DIALOGUE,
+        f"Player to {npc.name}: {player_input}",
+        {"npc_id": npc.id},
+    )
+    
+    # If no LLM, provide a simple response
+    if game.llm is None:
+        return f'{npc.name} considers your words. "That is interesting," they say.'
+    
+    # Build NPC context
+    context = get_context(game.state)
+    npc_context = f"""NPC: {npc.name}
+Race: {npc.race}
+Occupation: {npc.occupation}
+Traits: {', '.join(npc.traits)}
+Motivation: {npc.motivation}
+Disposition: {npc.disposition.value}"""
+
+    prompt = f"""You are roleplaying as {npc.name}, an NPC in a fantasy RPG.
+
+{npc_context}
+
+The player says: "{player_input}"
+
+Respond in character as {npc.name}. Keep the response to 2-3 sentences."""
+
+    try:
+        response = game.llm.generate(prompt)
+        # Add to NPC memory
+        npc.memory.add_conversation(f"Player: {player_input} | {npc.name}: {response[:100]}...")
+        add_to_history(
+            game.state,
+            EventType.NPC_DIALOGUE,
+            f"{npc.name}: {response}",
+            {"npc_id": npc.id},
+        )
+        return f'{npc.name}: "{response}"'
+    except Exception:
+        return f'{npc.name}: "I... need a moment to think."'
+
+
+def handle_combat_action(game: Game, action: str) -> str:
+    """Handle a combat action.
+    
+    Args:
+        game: The game instance
+        action: The combat action (attack, defend, retreat, etc.)
+        
+    Returns:
+        Combat result narration
+    """
+    if game.state.combat_state is None:
+        return "You are not in combat."
+    
+    combat = game.state.combat_state
+    action_lower = action.lower().strip()
+    
+    # Parse action
+    if action_lower.startswith("attack") or action_lower == "a":
+        result = _combat_attack(game)
+    elif action_lower.startswith("defend") or action_lower == "d":
+        result = _combat_defend(game)
+    elif action_lower.startswith("retreat") or action_lower.startswith("flee") or action_lower == "r":
+        result = _combat_retreat(game)
+    else:
+        result = _combat_generic_action(game, action)
+    
+    # Check for combat end
+    if combat.all_enemies_defeated():
+        combat.status = CombatStatus.VICTORY
+        add_to_history(game.state, EventType.COMBAT_END, "Combat ended in victory!")
+        result += "\n\nVictory! All enemies have been defeated."
+        game.state.combat_state = None
+    elif combat.player_defeated():
+        combat.status = CombatStatus.DEFEAT
+        add_to_history(game.state, EventType.COMBAT_END, "Combat ended in defeat.")
+        result += "\n\nYou have been defeated..."
+        game.state.combat_state = None
+    
+    return result
+
+
+def check_triggers(game: Game) -> list[str]:
+    """Check for triggered events.
+    
+    Scans game state for conditions that trigger events
+    (quest completion, random encounters, etc.)
+    
+    Args:
+        game: The game instance
+        
+    Returns:
+        List of triggered event descriptions
+    """
+    triggered = []
+    
+    # Check quest stage triggers
+    if game.state.active_quest and game.state.location:
+        quest = game.state.active_quest
+        current_stage = quest.get_current_stage()
+        if current_stage:
+            # Check if location matches stage requirement
+            location_tags = game.state.location.tags
+            stage_lower = current_stage.description.lower()
+            
+            for tag in location_tags:
+                if tag.lower() in stage_lower:
+                    triggered.append(f"Quest objective progress: {current_stage.description}")
+                    break
+    
+    # Check level up
+    char = game.state.character
+    xp_needed = char.level * 100
+    if char.xp >= xp_needed:
+        char.level += 1
+        char.xp -= xp_needed
+        triggered.append(f"Level up! You are now level {char.level}.")
+        add_to_history(
+            game.state,
+            EventType.LEVEL_UP,
+            f"Reached level {char.level}",
+        )
+    
+    # Check for low health warning
+    if char.danger_level == CharDangerLevel.CRITICAL:
+        triggered.append("Warning: You are critically wounded!")
+    
+    return triggered
+
+
+# =============================================================================
+# Command Implementations
+# =============================================================================
+
+def _cmd_look(game: Game) -> str:
+    """Look around the current location."""
+    if game.state.location is None:
+        return "You are nowhere in particular. This is concerning."
+    
+    loc = game.state.location
+    parts = [f"**{loc.name}**", loc.description]
+    
+    # Exits
+    if loc.exits:
+        exits_str = ", ".join(loc.exits.keys())
+        parts.append(f"Exits: {exits_str}")
+    
+    # NPCs
+    if game.state.npcs_present:
+        npc_names = [npc.name for npc in game.state.npcs_present]
+        parts.append(f"You see: {', '.join(npc_names)}")
+    
+    # Revealed secrets
+    secrets = loc.get_revealed_secrets()
+    if secrets:
+        parts.append(f"You notice: {'; '.join(secrets)}")
+    
+    return "\n\n".join(parts)
+
+
+def _cmd_inventory(game: Game) -> str:
+    """Show player inventory."""
+    char = game.state.character
+    parts = ["**Inventory**"]
+    
+    # Equipment
+    eq = char.equipment
+    if eq.weapon:
+        parts.append(f"Weapon: {eq.weapon}")
+    if eq.armor:
+        parts.append(f"Armor: {eq.armor}")
+    if eq.accessory:
+        parts.append(f"Accessory: {eq.accessory}")
+    
+    # Items
+    if char.inventory:
+        parts.append(f"Items: {', '.join(char.inventory)}")
+    else:
+        parts.append("Items: (none)")
+    
+    parts.append(f"Gold: {char.gold}")
+    
+    return "\n".join(parts)
+
+
+def _cmd_stats(game: Game) -> str:
+    """Show player stats."""
+    char = game.state.character
+    return f"""**{char.name}** - Level {char.level} {char.player_class.value}
+Race: {char.race}
+Health: {char.danger_level.name}
+XP: {char.xp}/{char.level * 100}
+
+Stats:
+  Might: {char.stats.might}
+  Wit: {char.stats.wit}
+  Spirit: {char.stats.spirit}"""
+
+
+def _cmd_quests(game: Game) -> str:
+    """Show active quests."""
+    if not game.state.active_quest:
+        return "You have no active quests."
+    
+    quest = game.state.active_quest
+    completed, total = quest.get_progress()
+    current = quest.get_current_stage()
+    
+    parts = [
+        f"**{quest.title}**",
+        quest.objective,
+        f"Progress: {completed}/{total} stages",
+    ]
+    
+    if current:
+        parts.append(f"Current: {current.description}")
+    
+    return "\n".join(parts)
+
+
+def _cmd_help() -> str:
+    """Show help text."""
+    return """**Commands**
+look - Examine your surroundings
+go <direction> - Move in a direction (north, south, east, west, etc.)
+inventory - Check your belongings
+stats - View your character stats
+quests - View active quests
+talk <name> - Speak with an NPC
+save - Save your progress
+help - Show this help
+quit - Leave the game
+
+You can also type actions naturally, like "search the room" or "pick up the sword"."""
+
+
+def _cmd_save(game: Game) -> str:
+    """Save the game."""
+    try:
+        save_state(game.state, game.db)
+        return "Game saved."
+    except Exception as e:
+        return f"Failed to save: {e}"
+
+
+# =============================================================================
+# Movement
+# =============================================================================
+
+def handle_movement(game: Game, direction: str) -> str:
+    """Handle movement in a direction."""
+    if game.state.location is None:
+        return "You have nowhere to go from here."
+    
+    direction = direction.lower()
+    exits = game.state.location.exits
+    
+    if direction not in exits:
+        available = ", ".join(exits.keys()) if exits else "none"
+        return f"You can't go {direction}. Available exits: {available}"
+    
+    # Get destination ID
+    dest_id = exits[direction]
+    
+    # Try to load destination
+    if game.db:
+        dest_record = game.db.load_world_element(dest_id)
+        if dest_record:
+            new_location = Location.from_dict(dest_record.data)
+            old_location = game.state.location
+            game.state.location = new_location
+            
+            # Update discovered locations
+            if dest_id not in game.state.discovered_locations:
+                game.state.discovered_locations.append(dest_id)
+            
+            # Update NPCs present
+            npc_records = game.db.list_npcs(game.state.campaign.id, location_id=dest_id)
+            game.state.npcs_present = [NPC.from_dict(r.data) for r in npc_records]
+            
+            add_to_history(
+                game.state,
+                EventType.LOCATION_CHANGE,
+                f"Traveled {direction} from {old_location.name} to {new_location.name}",
+                {"from": old_location.id, "to": new_location.id},
+            )
+            
+            return f"You travel {direction}.\n\n" + _cmd_look(game)
+    
+    return f"You travel {direction} into the unknown..."
+
+
+def handle_dialogue_start(game: Game, npc_name: str) -> str:
+    """Start dialogue with an NPC."""
+    npc_name_lower = npc_name.lower()
+    
+    for npc in game.state.npcs_present:
+        if npc.name.lower() == npc_name_lower or npc_name_lower in npc.name.lower():
+            # Found the NPC - set up dialogue mode
+            return f'{npc.name} turns to face you. "{_get_npc_greeting(npc)}"'
+    
+    return f"There is no one named '{npc_name}' here."
+
+
+def _get_npc_greeting(npc: NPC) -> str:
+    """Get an NPC's greeting based on disposition."""
+    greetings = {
+        Disposition.HOSTILE: "What do YOU want?",
+        Disposition.UNFRIENDLY: "Make it quick.",
+        Disposition.NEUTRAL: "Can I help you?",
+        Disposition.FRIENDLY: "Hello there, friend!",
+        Disposition.ALLIED: "My friend! It's good to see you!",
+    }
+    return greetings.get(npc.disposition, "Yes?")
+
+
+# =============================================================================
+# Combat Actions
+# =============================================================================
+
+def _combat_attack(game: Game) -> str:
+    """Player attacks."""
+    import random
+    combat = game.state.combat_state
+    if not combat:
+        return "Not in combat."
+    
+    enemies = combat.get_active_enemies()
+    if not enemies:
+        return "No enemies to attack."
+    
+    target = enemies[0]  # Attack first enemy
+    roll = random.randint(1, 20) + game.state.character.stats.might - 3
+    
+    if roll >= 10:
+        target.take_damage(1)
+        result = f"You strike {target.name}! ({target.danger_level.name})"
+        combat.add_log(f"Player hits {target.name}")
+    else:
+        result = f"Your attack misses {target.name}."
+        combat.add_log(f"Player misses {target.name}")
+    
+    # Enemy counterattack
+    if not target.is_defeated():
+        result += "\n" + _enemy_turn(game)
+    
+    combat.next_turn()
+    return result
+
+
+def _combat_defend(game: Game) -> str:
+    """Player defends."""
+    combat = game.state.combat_state
+    if not combat:
+        return "Not in combat."
+    
+    combat.add_log("Player defends")
+    
+    # Reduced enemy damage
+    enemies = combat.get_active_enemies()
+    if enemies:
+        result = "You raise your guard."
+        # Enemy attacks with reduced effect
+        for enemy in enemies[:1]:  # Only first enemy attacks
+            combat.add_log(f"{enemy.name}'s attack is partially blocked")
+        result += " The enemy's attack is partially deflected."
+    else:
+        result = "You defend against nothing."
+    
+    combat.next_turn()
+    return result
+
+
+def _combat_retreat(game: Game) -> str:
+    """Player attempts to retreat."""
+    import random
+    combat = game.state.combat_state
+    if not combat:
+        return "Not in combat."
+    
+    roll = random.randint(1, 20) + game.state.character.stats.spirit - 3
+    
+    if roll >= combat.retreat_difficulty:
+        combat.status = CombatStatus.RETREAT
+        add_to_history(game.state, EventType.COMBAT_END, "Fled from combat")
+        game.state.combat_state = None
+        return "You successfully flee from combat!"
+    else:
+        result = "You fail to escape!"
+        result += "\n" + _enemy_turn(game)
+        combat.next_turn()
+        return result
+
+
+def _combat_generic_action(game: Game, action: str) -> str:
+    """Handle a generic combat action."""
+    combat = game.state.combat_state
+    if not combat:
+        return "Not in combat."
+    
+    combat.add_log(f"Player: {action}")
+    result = f"You attempt to {action}... "
+    
+    # Enemy still attacks
+    result += "\n" + _enemy_turn(game)
+    combat.next_turn()
+    return result
+
+
+def _enemy_turn(game: Game) -> str:
+    """Process enemy turn."""
+    import random
+    combat = game.state.combat_state
+    if not combat:
+        return ""
+    
+    enemies = combat.get_active_enemies()
+    if not enemies:
+        return ""
+    
+    results = []
+    for enemy in enemies:
+        roll = random.randint(1, 20)
+        if roll >= 8:
+            combat.player_take_damage(enemy.damage)
+            results.append(f"{enemy.name} hits you! (Now: {combat.player_danger.name})")
+            combat.add_log(f"{enemy.name} hits player")
+        else:
+            results.append(f"{enemy.name}'s attack misses.")
+            combat.add_log(f"{enemy.name} misses")
+    
+    return "\n".join(results)
