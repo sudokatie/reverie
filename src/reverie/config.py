@@ -75,6 +75,11 @@ class ReverieConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
     gameplay: GameplayConfig = field(default_factory=GameplayConfig)
+    
+    @property
+    def data_dir(self) -> Path:
+        """Get the data directory path."""
+        return get_data_dir()
 
     @classmethod
     def load(cls, path: Optional[Path] = None) -> "ReverieConfig":

@@ -586,3 +586,24 @@ class TestNpcsCommand:
         result = handle_command(sample_game, "npcs")
         # Either shows NPCs or says how many
         assert "npc" in result.lower() or "known" in result.lower()
+
+
+class TestCharacterCommand:
+    """Tests for character command (alias for stats)."""
+    
+    def test_character_command(self, sample_game):
+        """Test character command works like stats."""
+        result = handle_command(sample_game, "character")
+        assert sample_game.state.character.name in result
+        assert "level" in result.lower()
+
+
+class TestConfigDataDir:
+    """Tests for config data_dir property."""
+    
+    def test_data_dir_exists(self):
+        """Test that data_dir property exists."""
+        from reverie.config import load_config
+        config = load_config()
+        assert hasattr(config, 'data_dir')
+        assert config.data_dir is not None

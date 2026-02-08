@@ -519,6 +519,7 @@ class CommandType:
     GO = "go"
     INVENTORY = "inventory"
     STATS = "stats"
+    CHARACTER = "character"  # alias for stats
     TALK = "talk"
     HELP = "help"
     QUIT = "quit"
@@ -571,7 +572,7 @@ def process_input(game: Game, user_input: str) -> str:
     # Check for system commands as plain text
     lower_input = user_input.lower()
     command_keywords = [
-        "look", "inventory", "stats", "help", "quit", "quests", "save", "roll", "map", "npcs"
+        "look", "inventory", "stats", "character", "help", "quit", "quests", "save", "roll", "map", "npcs"
     ]
     if lower_input.split()[0] in command_keywords:
         return handle_command(game, lower_input)
@@ -611,7 +612,7 @@ def handle_command(game: Game, command: str) -> str:
         return _cmd_look(game)
     elif cmd == CommandType.INVENTORY:
         return _cmd_inventory(game)
-    elif cmd == CommandType.STATS:
+    elif cmd == CommandType.STATS or cmd == CommandType.CHARACTER:
         return _cmd_stats(game)
     elif cmd == CommandType.QUESTS:
         return _cmd_quests(game)
@@ -918,7 +919,7 @@ def _cmd_help() -> str:
 look - Examine your surroundings
 go <direction> - Move in a direction (north, south, east, west, etc.)
 inventory - Check your belongings
-stats - View your character stats
+stats/character - View your character stats
 quests - View active quests
 talk <name> - Speak with an NPC
 roll [stat] - Roll a d20 (optionally with stat modifier)
