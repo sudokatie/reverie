@@ -216,3 +216,25 @@ class TestStatusBar:
         assert bar._level == 3
         assert bar._location == "Tavern"
         assert bar._in_combat is True
+
+
+class TestNewPanels:
+    """Tests for new map and npcs panels."""
+    
+    def test_map_panel_in_css(self):
+        """Test that map panel is defined in CSS."""
+        assert "#map-panel" in ReverieApp.CSS
+    
+    def test_npcs_panel_in_css(self):
+        """Test that npcs panel is defined in CSS."""
+        assert "#npcs-panel" in ReverieApp.CSS
+    
+    def test_map_binding_exists(self):
+        """Test that M binding is defined."""
+        bindings = [b.key for b in ReverieApp.BINDINGS]
+        assert "m" in bindings
+    
+    def test_npcs_binding_exists(self):
+        """Test that N binding is defined."""
+        bindings = [b.key for b in ReverieApp.BINDINGS]
+        assert "n" in bindings

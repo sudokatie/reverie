@@ -524,6 +524,9 @@ class CommandType:
     QUIT = "quit"
     QUESTS = "quests"
     SAVE = "save"
+    ROLL = "roll"
+    MAP = "map"
+    NPCS = "npcs"
 
 
 @dataclass
@@ -568,7 +571,7 @@ def process_input(game: Game, user_input: str) -> str:
     # Check for system commands as plain text
     lower_input = user_input.lower()
     command_keywords = [
-        "look", "inventory", "stats", "help", "quit", "quests", "save"
+        "look", "inventory", "stats", "help", "quit", "quests", "save", "roll", "map", "npcs"
     ]
     if lower_input.split()[0] in command_keywords:
         return handle_command(game, lower_input)
@@ -623,6 +626,13 @@ def handle_command(game: Game, command: str) -> str:
     elif cmd == CommandType.TALK and args:
         npc_name = " ".join(args)
         return handle_dialogue_start(game, npc_name)
+    elif cmd == CommandType.ROLL:
+        stat = args[0] if args else None
+        return _cmd_roll(game, stat)
+    elif cmd == CommandType.MAP:
+        return _cmd_map(game)
+    elif cmd == CommandType.NPCS:
+        return _cmd_npcs(game)
     else:
         return f"Unknown command: {cmd}. Type 'help' for available commands."
 
@@ -911,6 +921,9 @@ inventory - Check your belongings
 stats - View your character stats
 quests - View active quests
 talk <name> - Speak with an NPC
+roll [stat] - Roll a d20 (optionally with stat modifier)
+map - Show discovered locations
+npcs - Show known NPCs and relationships
 save - Save your progress
 help - Show this help
 quit - Leave the game
@@ -925,6 +938,89 @@ def _cmd_save(game: Game) -> str:
         return "Game saved."
     except Exception as e:
         return f"Failed to save: {e}"
+
+
+def _cmd_roll(game: Game, stat: Optional[str] = None) -> str:
+    """Roll a d20, optionally with a stat modifier.
+    
+    Args:
+        game: The game instance
+        stat: Optional stat name (might, wit, spirit)
+        
+    Returns:
+        Roll result description
+    """
+    import random
+    from .config import load_config
+    
+    roll = random.randint(1, 20)
+    config = load_config()
+    verbose = config.gameplay.verbose_rolls
+    
+    if stat:
+        stat_lower = stat.lower()
+        if stat_lower in ("might", "wit", "spirit"):
+            modifier = game.state.character.stats.modifier(stat_lower)
+            total = roll + modifier
+            
+            if verbose:
+                sign = "+" if modifier >= 0 else ""
+                return f"Rolling {stat.capitalize()}: d20({roll}) {sign}{modifier} = **{total}**"
+            else:
+                return f"Rolling {stat.capitalize()}: **{total}**"
+        else:
+            return f"Unknown stat: {stat}. Valid stats: might, wit, spirit"
+    else:
+        if verbose:
+            return f"Rolling d20: **{roll}**"
+        else:
+            return f"Roll: **{roll}**"
+
+
+def _cmd_map(game: Game) -> str:
+    """Show discovered locations."""
+    if not game.state.discovered_locations:
+        return "You haven't discovered any locations yet."
+    
+    parts = ["**Discovered Locations**"]
+    
+    # Load location names from database
+    if game.db:
+        for loc_id in game.state.discovered_locations:
+            loc_record = game.db.load_world_element(loc_id)
+            if loc_record:
+                name = loc_record.name
+                # Mark current location
+                if game.state.location and game.state.location.id == loc_id:
+                    parts.append(f"  * {name} (current)")
+                else:
+                    parts.append(f"  - {name}")
+            else:
+                parts.append(f"  - Unknown location")
+    else:
+        parts.append(f"  {len(game.state.discovered_locations)} locations discovered")
+    
+    return "\n".join(parts)
+
+
+def _cmd_npcs(game: Game) -> str:
+    """Show known NPCs and their relationships."""
+    if not game.state.known_npcs:
+        return "You haven't met anyone yet."
+    
+    parts = ["**Known NPCs**"]
+    
+    # Load NPC data from database
+    if game.db:
+        npc_records = game.db.list_npcs(game.state.campaign.id)
+        for record in npc_records:
+            npc = NPC.from_dict(record.data)
+            disposition_str = npc.disposition.value.capitalize()
+            parts.append(f"  - {npc.name} ({npc.occupation}): {disposition_str}")
+    else:
+        parts.append(f"  {len(game.state.known_npcs)} NPCs known")
+    
+    return "\n".join(parts)
 
 
 # =============================================================================

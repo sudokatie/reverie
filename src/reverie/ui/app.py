@@ -66,12 +66,22 @@ class ReverieApp(App):
     #quest-panel {
         border: solid green;
     }
+    
+    #map-panel {
+        border: solid white;
+    }
+    
+    #npcs-panel {
+        border: solid red;
+    }
     """
     
     BINDINGS = [
         Binding("c", "toggle_character", "Character", show=True),
         Binding("i", "toggle_inventory", "Inventory", show=True),
         Binding("q", "toggle_quests", "Quests", show=True),
+        Binding("m", "toggle_map", "Map", show=True),
+        Binding("n", "toggle_npcs", "NPCs", show=True),
         Binding("?", "toggle_help", "Help", show=True),
         Binding("ctrl+q", "quit", "Quit", show=True),
     ]
@@ -85,6 +95,8 @@ class ReverieApp(App):
         super().__init__(**kwargs)
         self.game = game
         self._narration_history: list[str] = []
+        self._auto_save_pending: bool = False
+        self._auto_save_timer = None
     
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -101,6 +113,8 @@ class ReverieApp(App):
             yield Static("", id="character-panel", classes="side-panel")
             yield Static("", id="inventory-panel", classes="side-panel")
             yield Static("", id="quest-panel", classes="side-panel")
+            yield Static("", id="map-panel", classes="side-panel")
+            yield Static("", id="npcs-panel", classes="side-panel")
             yield Static("", id="help-panel", classes="side-panel")
         
         yield Footer()
@@ -200,6 +214,53 @@ class ReverieApp(App):
         quest_text = handle_command(self.game, "quests")
         self.query_one("#quest-panel", Static).update(quest_text)
     
+    def _update_map_panel(self) -> None:
+        """Update the map panel."""
+        if not self.game:
+            return
+        
+        from ..game import handle_command
+        map_text = handle_command(self.game, "map")
+        self.query_one("#map-panel", Static).update(map_text)
+    
+    def _update_npcs_panel(self) -> None:
+        """Update the NPCs panel."""
+        if not self.game:
+            return
+        
+        from ..game import handle_command
+        npcs_text = handle_command(self.game, "npcs")
+        self.query_one("#npcs-panel", Static).update(npcs_text)
+    
+    def _schedule_auto_save(self) -> None:
+        """Schedule an auto-save with 5 second debounce."""
+        if not self.game:
+            return
+        
+        from ..config import load_config
+        config = load_config()
+        
+        if not config.gameplay.auto_save:
+            return
+        
+        # Mark save as pending
+        self._auto_save_pending = True
+        
+        # Use set_timer for debouncing (5 seconds)
+        self.set_timer(5.0, self._do_auto_save)
+    
+    def _do_auto_save(self) -> None:
+        """Perform the auto-save if still pending."""
+        if not self._auto_save_pending or not self.game:
+            return
+        
+        try:
+            from ..game import save_state
+            save_state(self.game.state, self.game.db)
+            self._auto_save_pending = False
+        except Exception:
+            pass  # Silent fail for auto-save
+    
     def _get_help_text(self) -> str:
         """Get the help text."""
         return """HELP
@@ -208,9 +269,12 @@ COMMANDS:
   look      - Examine surroundings
   go <dir>  - Move (north, south, etc.)
   talk <n>  - Speak with NPC
+  roll [s]  - Roll d20 (with stat)
   inventory - Check items
   stats     - View character
   quests    - View quests
+  map       - Discovered locations
+  npcs      - Known NPCs
   save      - Save game
   help      - Show this help
   quit      - Exit game
@@ -219,6 +283,8 @@ KEYS:
   C - Character sheet
   I - Inventory
   Q - Quest log
+  M - Map/locations
+  N - NPC relationships
   ? - Help
   Ctrl+Q - Quit
 
@@ -261,6 +327,11 @@ Type actions naturally:
         self._update_character_panel()
         self._update_inventory_panel()
         self._update_quest_panel()
+        self._update_map_panel()
+        self._update_npcs_panel()
+        
+        # Auto-save if enabled (debounced via set_timer)
+        self._schedule_auto_save()
     
     def action_toggle_character(self) -> None:
         """Toggle character panel visibility."""
@@ -278,6 +349,18 @@ Type actions naturally:
         """Toggle quest panel visibility."""
         panel = self.query_one("#quest-panel", Static)
         self._update_quest_panel()
+        panel.toggle_class("visible")
+    
+    def action_toggle_map(self) -> None:
+        """Toggle map panel visibility."""
+        panel = self.query_one("#map-panel", Static)
+        self._update_map_panel()
+        panel.toggle_class("visible")
+    
+    def action_toggle_npcs(self) -> None:
+        """Toggle NPCs panel visibility."""
+        panel = self.query_one("#npcs-panel", Static)
+        self._update_npcs_panel()
         panel.toggle_class("visible")
     
     def action_toggle_help(self) -> None:

@@ -522,3 +522,67 @@ class TestCheckTriggers:
         
         assert any("level up" in t.lower() for t in triggers)
         assert sample_game.state.character.level == 2
+
+
+class TestRollCommand:
+    """Tests for roll command."""
+    
+    def test_roll_no_stat(self, sample_game):
+        """Test rolling without a stat."""
+        result = handle_command(sample_game, "roll")
+        assert "roll" in result.lower() or "**" in result
+    
+    def test_roll_with_might(self, sample_game):
+        """Test rolling with might stat."""
+        result = handle_command(sample_game, "roll might")
+        assert "might" in result.lower()
+    
+    def test_roll_with_wit(self, sample_game):
+        """Test rolling with wit stat."""
+        result = handle_command(sample_game, "roll wit")
+        assert "wit" in result.lower()
+    
+    def test_roll_with_spirit(self, sample_game):
+        """Test rolling with spirit stat."""
+        result = handle_command(sample_game, "roll spirit")
+        assert "spirit" in result.lower()
+    
+    def test_roll_invalid_stat(self, sample_game):
+        """Test rolling with invalid stat."""
+        result = handle_command(sample_game, "roll charisma")
+        assert "unknown stat" in result.lower()
+
+
+class TestMapCommand:
+    """Tests for map command."""
+    
+    def test_map_no_locations(self, sample_game):
+        """Test map when no locations discovered."""
+        sample_game.state.discovered_locations = []
+        result = handle_command(sample_game, "map")
+        assert "haven't discovered" in result.lower()
+    
+    def test_map_with_locations(self, sample_game, sample_location):
+        """Test map with discovered locations."""
+        sample_game.state.location = sample_location
+        sample_game.state.discovered_locations = [sample_location.id]
+        result = handle_command(sample_game, "map")
+        assert "discovered" in result.lower() or "locations" in result.lower()
+
+
+class TestNpcsCommand:
+    """Tests for npcs command."""
+    
+    def test_npcs_none_known(self, sample_game):
+        """Test npcs when none are known."""
+        sample_game.state.known_npcs = []
+        result = handle_command(sample_game, "npcs")
+        assert "haven't met" in result.lower()
+    
+    def test_npcs_with_known(self, sample_game, sample_npc):
+        """Test npcs with known NPCs."""
+        sample_game.state.known_npcs = [sample_npc.id]
+        sample_game.state.npcs_present = [sample_npc]
+        result = handle_command(sample_game, "npcs")
+        # Either shows NPCs or says how many
+        assert "npc" in result.lower() or "known" in result.lower()

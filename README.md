@@ -74,9 +74,12 @@ You swing your blade! [Roll: 17 + 2 = 19] Critical hit!
 - `look` - Describe current location
 - `go <direction>` - Move (north, south, east, west, up, down)
 - `talk <name>` - Talk to an NPC
+- `roll [stat]` - Roll a d20, optionally with a stat modifier
 - `inventory` - Show your items and equipment
 - `stats` - View character stats
 - `quests` - Show active quests
+- `map` - Show discovered locations
+- `npcs` - Show known NPCs and relationships
 - `save` - Save the game
 - `help` - Show all commands
 - `quit` - Exit game
@@ -86,6 +89,8 @@ You swing your blade! [Roll: 17 + 2 = 19] Critical hit!
 - `C` - Toggle character sheet
 - `I` - Toggle inventory
 - `Q` - Toggle quest log
+- `M` - Toggle map/locations
+- `N` - Toggle NPC relationships
 - `?` - Toggle help
 - `Ctrl+Q` - Quit
 
