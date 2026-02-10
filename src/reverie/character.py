@@ -303,3 +303,144 @@ def deserialize_character(data: dict) -> Character:
         xp=data.get("xp", 0),
         level=data.get("level", 1),
     )
+
+
+# Class-specific dialogue options
+CLASS_DIALOGUE_OPTIONS: dict[PlayerClass, dict[str, list[str]]] = {
+    PlayerClass.CODE_WARRIOR: {
+        "intimidate": [
+            "I'll refactor your face if you don't cooperate.",
+            "*cracks knuckles* I've debugged harder problems than you.",
+        ],
+        "negotiate": [
+            "Let's optimize this conversation for mutual benefit.",
+        ],
+        "persuade": [
+            "My code review says you should help me.",
+        ],
+    },
+    PlayerClass.MEETING_SURVIVOR: {
+        "diplomacy": [
+            "Let's table this discussion and align on next steps.",
+            "I think we need to take this offline and sync later.",
+        ],
+        "delay": [
+            "Can we circle back on this? Let me check my calendar.",
+        ],
+        "persuade": [
+            "I've survived countless pointless meetings. I can outlast you.",
+        ],
+    },
+    PlayerClass.INBOX_KNIGHT: {
+        "organize": [
+            "Let me prioritize this request in my mental inbox.",
+        ],
+        "knowledge": [
+            "I read a memo about this once...",
+            "According to my archived correspondence...",
+        ],
+        "persistence": [
+            "I never leave a message unread. Or a problem unsolved.",
+        ],
+    },
+    PlayerClass.STACK_OVERFLOW: {
+        "knowledge": [
+            "Actually, this question was answered back in '09...",
+            "Let me cite my sources on that claim.",
+            "According to the accepted answer...",
+        ],
+        "pedantic": [
+            "Well, technically speaking...",
+            "That's a duplicate question, but I'll help anyway.",
+        ],
+        "wisdom": [
+            "The ancient documentation speaks of this...",
+        ],
+    },
+    PlayerClass.SCRUM_MASTER: {
+        "motivate": [
+            "I believe in your ability to complete this sprint goal!",
+            "Let's break this down into manageable user stories.",
+        ],
+        "organize": [
+            "What's blocking you? Let me help remove obstacles.",
+            "This sounds like it needs a retrospective.",
+        ],
+        "teamwork": [
+            "We're all in this together. How can I support you?",
+        ],
+    },
+    PlayerClass.LEGACY_MAINTAINER: {
+        "experience": [
+            "I've maintained systems older than your grandparents.",
+            "This reminds me of the COBOL incident of '97...",
+        ],
+        "patience": [
+            "I've dealt with worse spaghetti code. I can handle you.",
+        ],
+        "wisdom": [
+            "The ancient codebase holds many secrets...",
+            "Some say the original developer is still out there, somewhere...",
+        ],
+    },
+    PlayerClass.DEPLOY_NINJA: {
+        "stealth": [
+            "*appears from the shadows* You didn't see me push that to prod.",
+            "I can slip past any security review.",
+        ],
+        "speed": [
+            "I'll have this done before the build finishes.",
+            "Fast deployments, faster getaways.",
+        ],
+        "cunning": [
+            "I know a shortcut through the CI/CD pipeline.",
+        ],
+    },
+    PlayerClass.WANDERER: {
+        "curious": [
+            "Tell me more about this place...",
+        ],
+        "adaptable": [
+            "I've seen many strange things in my travels.",
+        ],
+    },
+}
+
+
+def get_class_dialogue_options(
+    player_class: PlayerClass,
+    situation: Optional[str] = None,
+) -> list[str]:
+    """Get class-specific dialogue options.
+    
+    Args:
+        player_class: The player's class
+        situation: Optional situation context (intimidate, negotiate, etc.)
+        
+    Returns:
+        List of available dialogue options for this class
+    """
+    options = CLASS_DIALOGUE_OPTIONS.get(player_class, {})
+    
+    if situation:
+        # Return options for specific situation
+        return options.get(situation, [])
+    
+    # Return all options flattened
+    all_options = []
+    for opt_list in options.values():
+        all_options.extend(opt_list)
+    return all_options
+
+
+def get_class_dialogue_categories(player_class: PlayerClass) -> list[str]:
+    """Get available dialogue categories for a class.
+    
+    Args:
+        player_class: The player's class
+        
+    Returns:
+        List of dialogue category names
+    """
+    options = CLASS_DIALOGUE_OPTIONS.get(player_class, {})
+    return list(options.keys())

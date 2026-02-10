@@ -242,3 +242,61 @@ class TestSerialization:
         restored = deserialize_character(data)
         data2 = serialize_character(restored)
         assert data == data2
+
+
+class TestClassDialogueOptions:
+    """Tests for class-specific dialogue options."""
+
+    def test_code_warrior_has_dialogue_options(self):
+        """Code Warrior should have intimidate options."""
+        from reverie.character import get_class_dialogue_options, PlayerClass
+        
+        options = get_class_dialogue_options(PlayerClass.CODE_WARRIOR, "intimidate")
+        assert len(options) >= 1
+        assert any("refactor" in opt.lower() or "debug" in opt.lower() for opt in options)
+
+    def test_stack_overflow_has_knowledge_options(self):
+        """Stack Overflow should have knowledge options."""
+        from reverie.character import get_class_dialogue_options, PlayerClass
+        
+        options = get_class_dialogue_options(PlayerClass.STACK_OVERFLOW, "knowledge")
+        assert len(options) >= 1
+        assert any("cite" in opt.lower() or "answer" in opt.lower() for opt in options)
+
+    def test_scrum_master_has_motivate_options(self):
+        """Scrum Master should have motivate options."""
+        from reverie.character import get_class_dialogue_options, PlayerClass
+        
+        options = get_class_dialogue_options(PlayerClass.SCRUM_MASTER, "motivate")
+        assert len(options) >= 1
+
+    def test_deploy_ninja_has_stealth_options(self):
+        """Deploy Ninja should have stealth options."""
+        from reverie.character import get_class_dialogue_options, PlayerClass
+        
+        options = get_class_dialogue_options(PlayerClass.DEPLOY_NINJA, "stealth")
+        assert len(options) >= 1
+        assert any("shadow" in opt.lower() or "prod" in opt.lower() for opt in options)
+
+    def test_get_all_class_options(self):
+        """Should return all options when no situation specified."""
+        from reverie.character import get_class_dialogue_options, PlayerClass
+        
+        all_options = get_class_dialogue_options(PlayerClass.STACK_OVERFLOW)
+        assert len(all_options) >= 3  # Has knowledge, pedantic, wisdom
+
+    def test_get_dialogue_categories(self):
+        """Should return category names for a class."""
+        from reverie.character import get_class_dialogue_categories, PlayerClass
+        
+        categories = get_class_dialogue_categories(PlayerClass.SCRUM_MASTER)
+        assert "motivate" in categories
+        assert "organize" in categories
+        assert "teamwork" in categories
+
+    def test_unknown_situation_returns_empty(self):
+        """Unknown situation should return empty list."""
+        from reverie.character import get_class_dialogue_options, PlayerClass
+        
+        options = get_class_dialogue_options(PlayerClass.CODE_WARRIOR, "unknown_situation")
+        assert options == []

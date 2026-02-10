@@ -83,7 +83,7 @@ def build_dialogue_prompt(
     Args:
         npc: The NPC speaking
         player_input: What the player said
-        context: Additional context
+        context: Additional context (should include 'character' with player_class)
         
     Returns:
         Formatted prompt string
@@ -112,17 +112,53 @@ def build_dialogue_prompt(
     if motivation:
         parts.append(f"Motivation: {motivation}")
     
-    # Conversation context
+    # Player character context
     if "character" in context:
         char = context["character"]
         char_name = getattr(char, "name", str(char))
-        parts.append(f"Speaking to: {char_name}")
+        parts.append(f"\nSpeaking to: {char_name}")
+        
+        # Add class context for class-specific interactions
+        player_class = getattr(char, "player_class", None)
+        if player_class:
+            class_value = getattr(player_class, "value", str(player_class))
+            parts.append(f"Player's profession: {class_value}")
+            # Add class-specific interaction hints
+            class_hints = _get_class_dialogue_hints(player_class)
+            if class_hints:
+                parts.append(f"Class dynamics: {class_hints}")
     
     # The player's words
     parts.append(f'\nPlayer says: "{player_input}"')
     parts.append(f"\nWrite {npc_name}'s response (1-2 sentences, in character):")
     
     return "\n".join(parts)
+
+
+def _get_class_dialogue_hints(player_class: Any) -> str:
+    """Get dialogue hints based on player class for NPC interaction.
+    
+    Args:
+        player_class: The player's class enum
+        
+    Returns:
+        String with class-specific interaction hints
+    """
+    # Get the class name/value
+    class_name = getattr(player_class, "name", str(player_class))
+    
+    hints = {
+        "CODE_WARRIOR": "NPCs may be intimidated by their combat prowess, or respect their technical skills.",
+        "MEETING_SURVIVOR": "NPCs might find their corporate speak confusing or amusing. Some may appreciate their patience.",
+        "INBOX_KNIGHT": "NPCs may trust their organizational skills. They seem reliable and thorough.",
+        "STACK_OVERFLOW": "NPCs are impressed or annoyed by their knowledge. They always have a citation ready.",
+        "SCRUM_MASTER": "NPCs respond well to their supportive nature. They're natural facilitators.",
+        "LEGACY_MAINTAINER": "NPCs respect their wisdom and experience. They've seen things.",
+        "DEPLOY_NINJA": "NPCs are surprised by their stealth. They move fast and leave few traces.",
+        "WANDERER": "NPCs are curious about their travels. They seem worldly.",
+    }
+    
+    return hints.get(class_name, "")
 
 
 def build_generation_prompt(
