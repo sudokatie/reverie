@@ -106,10 +106,19 @@ Characters have three stats (12 points to distribute, max 6 each):
 
 ### Classes
 
-- **Code Warrior** - Starts with a weapon bonus
-- **Meeting Survivor** - Extra endurance
-- **Inbox Knight** - Mental fortitude
+**Original Classes:**
+- **Code Warrior** - Starts with a weapon bonus (+5 damage)
+- **Meeting Survivor** - Extra endurance (+10 HP)
+- **Inbox Knight** - Mental fortitude (+10 HP)
 - **Wanderer** - Balanced, adaptable
+
+**New Classes (v0.2):**
+- **Stack Overflow** - Knowledge mage (+12 wit bonus)
+- **Scrum Master** - Support/buff (+15 focus bonus)
+- **Legacy Maintainer** - Tank (+30 HP, COBOL Platemail)
+- **Deploy Ninja** - Speed/stealth (+8 damage, +5 initiative)
+
+Each class has unique starting equipment and class-specific dialogue options.
 
 ### Health
 
