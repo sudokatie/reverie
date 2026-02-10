@@ -1,18 +1,27 @@
 """Character creation and management."""
 
+from __future__ import annotations
+
 import random
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 
 class PlayerClass(Enum):
     """Available player classes."""
 
+    # Original corporate parody classes
     CODE_WARRIOR = "Code Warrior"
     MEETING_SURVIVOR = "Meeting Survivor"
     INBOX_KNIGHT = "Inbox Knight"
     WANDERER = "Wanderer"
+    
+    # New classes
+    STACK_OVERFLOW = "Stack Overflow"      # Knowledge mage, wit-focused
+    SCRUM_MASTER = "Scrum Master"          # Support/buff, spirit-focused  
+    LEGACY_MAINTAINER = "Legacy Maintainer"  # Tank, might-focused
+    DEPLOY_NINJA = "Deploy Ninja"          # Speed/stealth, balanced
 
 
 class DangerLevel(Enum):
@@ -72,7 +81,7 @@ class Character:
     stats: Stats
     background: str = ""
     equipment: Equipment = field(default_factory=Equipment)
-    inventory: list[str] = field(default_factory=list)
+    inventory: List[str] = field(default_factory=list)
     danger_level: DangerLevel = DangerLevel.FRESH
     gold: int = 50
     xp: int = 0
@@ -93,6 +102,8 @@ class Character:
         """Bonus damage from class."""
         if self.player_class == PlayerClass.CODE_WARRIOR:
             return 10
+        if self.player_class == PlayerClass.DEPLOY_NINJA:
+            return 8  # Precision strikes
         return 0
 
     @property
@@ -100,6 +111,8 @@ class Character:
         """Bonus HP from class (affects nothing in abstract system)."""
         if self.player_class == PlayerClass.MEETING_SURVIVOR:
             return 20
+        if self.player_class == PlayerClass.LEGACY_MAINTAINER:
+            return 30  # Battle-hardened from ancient code
         return 0
 
     @property
@@ -107,6 +120,22 @@ class Character:
         """Bonus focus from class."""
         if self.player_class == PlayerClass.INBOX_KNIGHT:
             return 10
+        if self.player_class == PlayerClass.SCRUM_MASTER:
+            return 15  # Team coordination
+        return 0
+
+    @property
+    def wit_bonus(self) -> int:
+        """Bonus wit from class."""
+        if self.player_class == PlayerClass.STACK_OVERFLOW:
+            return 12  # Knowledge is power
+        return 0
+
+    @property
+    def initiative_bonus(self) -> int:
+        """Bonus to initiative/speed."""
+        if self.player_class == PlayerClass.DEPLOY_NINJA:
+            return 5  # Always first to production
         return 0
 
     def xp_for_next_level(self) -> int:
@@ -139,6 +168,19 @@ def create_character(
     elif player_class == PlayerClass.INBOX_KNIGHT:
         equipment.weapon = "Reply-All Staff"
         equipment.accessory = "Unread Badge"
+    elif player_class == PlayerClass.STACK_OVERFLOW:
+        equipment.weapon = "Citation Wand"
+        equipment.accessory = "Reputation Ring"
+    elif player_class == PlayerClass.SCRUM_MASTER:
+        equipment.weapon = "Sprint Baton"
+        equipment.armor = "Kanban Cloak"
+    elif player_class == PlayerClass.LEGACY_MAINTAINER:
+        equipment.weapon = "Deprecated Greatsword"
+        equipment.armor = "COBOL Platemail"
+        equipment.accessory = "Ancient Documentation"
+    elif player_class == PlayerClass.DEPLOY_NINJA:
+        equipment.weapon = "Pipeline Daggers"
+        equipment.accessory = "CI/CD Smoke Bomb"
     else:  # Wanderer
         equipment.weapon = "Traveler's Dagger"
 
