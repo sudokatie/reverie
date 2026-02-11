@@ -94,6 +94,38 @@ You swing your blade! [Roll: 17 + 2 = 19] Critical hit!
 - `?` - Toggle help
 - `Ctrl+Q` - Quit
 
+## Voice Narration
+
+Reverie can speak narration aloud using Microsoft Edge TTS (free, no API key required).
+
+### Enable Voice
+
+In your config file (`~/.config/reverie/config.toml`):
+
+```toml
+[audio]
+enabled = true
+voice = "en-US-JennyNeural"  # Default female narrator
+```
+
+### Available Voices
+
+30+ high-quality neural voices available:
+
+- **US English**: jenny, guy, aria, davis, amber, brian, emma, michelle
+- **British English**: sonia, ryan, libby, maisie, thomas
+
+Change voice with a short name:
+```python
+from reverie.tts import TTSEngine, get_voice_name
+
+engine = TTSEngine()
+engine.set_voice(get_voice_name("guy"))  # Deep male voice
+engine.set_voice(get_voice_name("sonia"))  # British female
+```
+
+Voice narration is async - it won't block gameplay while speaking.
+
 ## Character System
 
 ### Stats
