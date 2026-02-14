@@ -289,3 +289,39 @@ def get_relationship_summary(npc: NPC) -> str:
         A formatted string summary
     """
     return npc.get_relationship_summary()
+
+
+def is_npc_dead_in_world(npc_name: str, world_state: Optional[Any] = None) -> bool:
+    """Check if an NPC has died in any previous campaign.
+    
+    Used to prevent respawning NPCs who were killed in the
+    persistent world state.
+    
+    Args:
+        npc_name: The NPC's name to check
+        world_state: WorldStateDB instance (optional)
+        
+    Returns:
+        True if the NPC is recorded as dead
+    """
+    if world_state is None:
+        return False
+    return world_state.is_npc_dead(npc_name)
+
+
+def get_npc_death_info(npc_name: str, world_state: Optional[Any] = None) -> Optional[str]:
+    """Get information about how an NPC died.
+    
+    Args:
+        npc_name: The NPC's name
+        world_state: WorldStateDB instance (optional)
+        
+    Returns:
+        Description of death or None if NPC is alive
+    """
+    if world_state is None:
+        return None
+    death = world_state.get_npc_death(npc_name)
+    if death is None:
+        return None
+    return f"{npc_name} died at {death.location}: {death.cause}"

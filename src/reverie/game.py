@@ -23,6 +23,12 @@ from .storage.models import (
     QuestRecord,
     EventRecord,
 )
+from .storage.world_state import (
+    WorldStateDB,
+    NPCDeath,
+    WorldEvent,
+    open_world_state,
+)
 
 
 class EventType:
@@ -299,6 +305,39 @@ def get_context(state: GameState, history_limit: int = 5) -> dict:
     return context
 
 
+def add_world_history_context(context: dict, world_state: Optional[WorldStateDB]) -> dict:
+    """Add persistent world history to context.
+    
+    Enriches context with world-level state that persists across campaigns:
+    NPC deaths, faction standings, major world events.
+    
+    Args:
+        context: The context dict to enrich
+        world_state: WorldStateDB instance (or None if not available)
+        
+    Returns:
+        Context dict with world_history added
+    """
+    if world_state is None:
+        context["world_history"] = None
+        return context
+    
+    # Get summary for LLM context
+    summary = world_state.get_world_history_summary()
+    
+    # Also add structured data for specific checks
+    context["world_history"] = {
+        "summary": summary,
+        "dead_npcs": [d.npc_name for d in world_state.list_npc_deaths(limit=20)],
+        "factions": {
+            f.faction_id: {"name": f.faction_name, "standing": f.standing}
+            for f in world_state.list_faction_standings()
+        },
+    }
+    
+    return context
+
+
 def save_state(state: GameState, db: Database) -> None:
     """Save game state to database.
     
@@ -535,6 +574,7 @@ class Game:
     """Main game controller."""
     state: GameState
     db: Database
+    world_state: Optional[WorldStateDB] = None  # Persistent world state across campaigns
     llm: Optional[Any] = None  # LLM client (typed as Any to avoid circular import)
     
     def run(self) -> None:
@@ -765,6 +805,19 @@ def handle_combat_action(game: Game, action: str) -> str:
         combat.status = CombatStatus.VICTORY
         add_to_history(game.state, EventType.COMBAT_END, "Combat ended in victory!")
         result += "\n\nVictory! All enemies have been defeated."
+        
+        # Record NPC deaths to persistent world state
+        if game.world_state and game.state.location:
+            for enemy in combat.enemies:
+                if enemy.is_defeated():
+                    death = NPCDeath.create(
+                        npc_name=enemy.name,
+                        location=game.state.location.name,
+                        cause="Defeated in combat by the player",
+                        campaign_id=game.state.campaign.id,
+                    )
+                    game.world_state.record_npc_death(death)
+        
         game.state.combat_state = None
     elif combat.player_defeated():
         combat.status = CombatStatus.DEFEAT
