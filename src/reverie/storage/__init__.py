@@ -23,6 +23,14 @@ from .migrations import (
     run_migrations,
     reset_schema,
 )
+from .world_state import (
+    WorldStateDB,
+    FactionStanding,
+    NPCDeath,
+    WorldEvent,
+    get_world_state_path,
+    open_world_state,
+)
 
 __all__ = [
     # Models
@@ -45,4 +53,11 @@ __all__ = [
     "SCHEMA_VERSION",
     "run_migrations",
     "reset_schema",
+    # World State
+    "WorldStateDB",
+    "FactionStanding",
+    "NPCDeath",
+    "WorldEvent",
+    "get_world_state_path",
+    "open_world_state",
 ]
