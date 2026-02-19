@@ -191,6 +191,18 @@ NPCs remember:
 
 Their disposition ranges from Hostile to Allied based on your actions.
 
+## Persistent World State
+
+Your actions have consequences that persist across campaigns:
+
+- **Faction standings** - Reputation with factions (-100 to +100) carries over
+- **NPC deaths** - Characters you kill stay dead in future campaigns
+- **World events** - Major events are recorded and referenced
+
+New campaigns inherit world history, creating a living world that evolves with your choices.
+
+World state is stored separately from campaign saves in `~/.config/reverie/world_state.db`.
+
 ## CLI Commands
 
 ```
