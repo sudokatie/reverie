@@ -214,7 +214,49 @@ reverie export <save> [-o FILE]                Export to JSON
 reverie import <file>                          Import from JSON
 reverie config                                 Show configuration
 reverie delete <save> [--force]                Delete a campaign
+reverie timeline [save] [-n LIMIT] [-m] [-c]   View campaign timeline
+reverie chapter <name> [-c CAMPAIGN]           Start new chapter
+reverie chapters [save]                        List campaign chapters
 ```
+
+## Campaign Timeline
+
+Track your adventure with the timeline feature:
+
+```bash
+# View recent events from your latest campaign
+reverie timeline
+
+# Show only milestone events (quests, combats, level ups)
+reverie timeline --milestones
+
+# View chapters overview
+reverie timeline --chapters
+
+# View specific campaign timeline
+reverie timeline "My Adventure" --limit 100
+```
+
+### Chapters
+
+Mark significant points in your campaign with chapters:
+
+```bash
+# Start a new chapter
+reverie chapter "The Dark Forest"
+
+# Start chapter in specific campaign
+reverie chapter "The Final Battle" --campaign "Epic Adventure"
+
+# List all chapters
+reverie chapters
+```
+
+Chapters automatically track:
+- Event counts
+- Quests completed
+- Combats won
+- Locations visited
 
 ## Configuration
 
