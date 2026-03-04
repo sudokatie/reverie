@@ -46,6 +46,8 @@ class EventType:
     ITEM_USED = "item_used"
     LEVEL_UP = "level_up"
     DISCOVERY = "discovery"
+    CHAPTER_START = "chapter_start"
+    CAMPAIGN_START = "campaign_start"
 
 
 @dataclass

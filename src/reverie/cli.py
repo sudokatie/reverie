@@ -13,6 +13,13 @@ from .storage.database import Database
 from .storage.models import Campaign
 from .game import Game, GameState, create_game_state, save_state, load_state
 from .ui.app import create_app
+from .timeline import (
+    CampaignTimeline,
+    format_timeline,
+    format_chapters,
+    add_chapter,
+    add_campaign_start,
+)
 
 
 app = typer.Typer(
@@ -74,6 +81,9 @@ def new(
     # Create and save game
     game = Game(state=state, db=db, llm=None)
     save_state(state, db)
+    
+    # Add campaign start event
+    add_campaign_start(db, campaign.id, name)
     
     typer.echo(f"Created new campaign: {name}")
     typer.echo(f"Character: {character.name} the {character.player_class.value}")
@@ -291,6 +301,109 @@ def delete(
     
     db.delete_campaign(campaign.id)
     typer.echo(f"Deleted campaign: {campaign.name}")
+
+
+@app.command()
+def timeline(
+    save: str = typer.Argument(None, help="Campaign name or ID (default: most recent)"),
+    limit: int = typer.Option(50, "--limit", "-n", help="Number of events to show"),
+    milestones: bool = typer.Option(False, "--milestones", "-m", help="Show only milestone events"),
+    chapters_only: bool = typer.Option(False, "--chapters", "-c", help="Show chapters overview only"),
+) -> None:
+    """View campaign timeline and history."""
+    db = get_database()
+    campaigns = db.list_campaigns()
+    
+    if not campaigns:
+        typer.echo("No saved campaigns found.")
+        raise typer.Exit(code=1)
+    
+    # Find campaign
+    campaign = None
+    if save:
+        for c in campaigns:
+            if c.name.lower() == save.lower() or c.id == save:
+                campaign = c
+                break
+        if not campaign:
+            typer.echo(f"Campaign not found: {save}")
+            typer.echo("Use 'reverie list' to see available campaigns.")
+            raise typer.Exit(code=1)
+    else:
+        # Use most recent
+        campaign = campaigns[0]
+    
+    # Build timeline
+    tl = CampaignTimeline(db, campaign.id)
+    
+    if chapters_only:
+        output = format_chapters(tl, campaign)
+    else:
+        output = format_timeline(tl, campaign, limit=limit, milestones_only=milestones)
+    
+    typer.echo(output)
+
+
+@app.command()
+def chapter(
+    name: str = typer.Argument(..., help="Chapter name"),
+    save: str = typer.Option(None, "--campaign", "-c", help="Campaign name or ID (default: most recent)"),
+) -> None:
+    """Start a new chapter in a campaign."""
+    db = get_database()
+    campaigns = db.list_campaigns()
+    
+    if not campaigns:
+        typer.echo("No saved campaigns found.")
+        raise typer.Exit(code=1)
+    
+    # Find campaign
+    campaign = None
+    if save:
+        for c in campaigns:
+            if c.name.lower() == save.lower() or c.id == save:
+                campaign = c
+                break
+        if not campaign:
+            typer.echo(f"Campaign not found: {save}")
+            raise typer.Exit(code=1)
+    else:
+        # Use most recent
+        campaign = campaigns[0]
+    
+    # Add chapter
+    add_chapter(db, campaign.id, name)
+    typer.echo(f"Started new chapter '{name}' in campaign '{campaign.name}'")
+
+
+@app.command("chapters")
+def list_chapters(
+    save: str = typer.Argument(None, help="Campaign name or ID (default: most recent)"),
+) -> None:
+    """List chapters in a campaign."""
+    db = get_database()
+    campaigns = db.list_campaigns()
+    
+    if not campaigns:
+        typer.echo("No saved campaigns found.")
+        raise typer.Exit(code=1)
+    
+    # Find campaign
+    campaign = None
+    if save:
+        for c in campaigns:
+            if c.name.lower() == save.lower() or c.id == save:
+                campaign = c
+                break
+        if not campaign:
+            typer.echo(f"Campaign not found: {save}")
+            raise typer.Exit(code=1)
+    else:
+        campaign = campaigns[0]
+    
+    tl = CampaignTimeline(db, campaign.id)
+    output = format_chapters(tl, campaign)
+    typer.echo(output)
 
 
 if __name__ == "__main__":
