@@ -19,6 +19,102 @@ from uuid import uuid4
 
 
 @dataclass
+class NPCMemoryRecord:
+    """Persistent memory of interactions with a specific NPC across campaigns."""
+    id: str
+    npc_name: str  # Canonical NPC name for matching across campaigns
+    relationship_score: int  # -100 to +100
+    interaction_summary: str  # Brief summary of past interactions
+    last_interaction_type: str  # friendly, hostile, trade, quest, etc.
+    gifts_received: int  # Count of gifts
+    promises_kept: int
+    promises_broken: int
+    campaign_id: str  # Last campaign this interaction happened
+    timestamp: datetime = field(default_factory=datetime.now)
+    memorable_events: list[str] = field(default_factory=list)  # Key moments
+    
+    @classmethod
+    def create(
+        cls,
+        npc_name: str,
+        campaign_id: str,
+        relationship_score: int = 0,
+        interaction_summary: str = "",
+        last_interaction_type: str = "neutral",
+    ) -> "NPCMemoryRecord":
+        return cls(
+            id=str(uuid4()),
+            npc_name=npc_name,
+            relationship_score=relationship_score,
+            interaction_summary=interaction_summary,
+            last_interaction_type=last_interaction_type,
+            gifts_received=0,
+            promises_kept=0,
+            promises_broken=0,
+            campaign_id=campaign_id,
+        )
+    
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "npc_name": self.npc_name,
+            "relationship_score": self.relationship_score,
+            "interaction_summary": self.interaction_summary,
+            "last_interaction_type": self.last_interaction_type,
+            "gifts_received": self.gifts_received,
+            "promises_kept": self.promises_kept,
+            "promises_broken": self.promises_broken,
+            "campaign_id": self.campaign_id,
+            "timestamp": self.timestamp.isoformat(),
+            "memorable_events": self.memorable_events,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "NPCMemoryRecord":
+        return cls(
+            id=data["id"],
+            npc_name=data["npc_name"],
+            relationship_score=data.get("relationship_score", 0),
+            interaction_summary=data.get("interaction_summary", ""),
+            last_interaction_type=data.get("last_interaction_type", "neutral"),
+            gifts_received=data.get("gifts_received", 0),
+            promises_kept=data.get("promises_kept", 0),
+            promises_broken=data.get("promises_broken", 0),
+            campaign_id=data["campaign_id"],
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+            memorable_events=data.get("memorable_events", []),
+        )
+    
+    def get_memory_context(self) -> str:
+        """Get context string for LLM dialogue generation."""
+        parts = []
+        
+        if self.relationship_score >= 50:
+            parts.append(f"You are old friends with the player (score: {self.relationship_score})")
+        elif self.relationship_score >= 10:
+            parts.append(f"You have a positive history with the player (score: {self.relationship_score})")
+        elif self.relationship_score <= -50:
+            parts.append(f"You are enemies with the player (score: {self.relationship_score})")
+        elif self.relationship_score <= -10:
+            parts.append(f"You have a negative history with the player (score: {self.relationship_score})")
+        
+        if self.interaction_summary:
+            parts.append(f"Past interactions: {self.interaction_summary}")
+        
+        if self.memorable_events:
+            parts.append(f"Key moments: {'; '.join(self.memorable_events[-3:])}")
+        
+        if self.promises_broken > 0:
+            parts.append(f"The player broke {self.promises_broken} promise(s) to you")
+        if self.promises_kept > 0:
+            parts.append(f"The player kept {self.promises_kept} promise(s) to you")
+        if self.gifts_received > 0:
+            parts.append(f"The player gave you {self.gifts_received} gift(s)")
+        
+        return "\n".join(parts) if parts else "No prior history with this player."
+
+
+@dataclass
 class FactionStanding:
     """Standing with a faction (-100 to +100)."""
     faction_id: str
@@ -184,9 +280,25 @@ CREATE TABLE IF NOT EXISTS world_events (
     data TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS npc_memories (
+    id TEXT PRIMARY KEY,
+    npc_name TEXT NOT NULL UNIQUE,
+    relationship_score INTEGER NOT NULL DEFAULT 0,
+    interaction_summary TEXT NOT NULL DEFAULT '',
+    last_interaction_type TEXT NOT NULL DEFAULT 'neutral',
+    gifts_received INTEGER NOT NULL DEFAULT 0,
+    promises_kept INTEGER NOT NULL DEFAULT 0,
+    promises_broken INTEGER NOT NULL DEFAULT 0,
+    campaign_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    memorable_events TEXT NOT NULL DEFAULT '[]'
+);
+
 CREATE INDEX IF NOT EXISTS idx_npc_deaths_name ON npc_deaths(npc_name);
 CREATE INDEX IF NOT EXISTS idx_world_events_type ON world_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_world_events_timestamp ON world_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_npc_memories_name ON npc_memories(npc_name);
+CREATE INDEX IF NOT EXISTS idx_npc_memories_score ON npc_memories(relationship_score);
 """
 
 
@@ -378,11 +490,167 @@ class WorldStateDB:
             for row in cursor
         ]
     
+    # === NPC Memory Operations ===
+    
+    def get_npc_memory(self, npc_name: str) -> Optional[NPCMemoryRecord]:
+        """Get persistent memory for an NPC by name."""
+        cursor = self.conn.execute(
+            "SELECT * FROM npc_memories WHERE npc_name = ?",
+            (npc_name,)
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        return NPCMemoryRecord(
+            id=row["id"],
+            npc_name=row["npc_name"],
+            relationship_score=row["relationship_score"],
+            interaction_summary=row["interaction_summary"],
+            last_interaction_type=row["last_interaction_type"],
+            gifts_received=row["gifts_received"],
+            promises_kept=row["promises_kept"],
+            promises_broken=row["promises_broken"],
+            campaign_id=row["campaign_id"],
+            timestamp=datetime.fromisoformat(row["timestamp"]),
+            memorable_events=json.loads(row["memorable_events"]),
+        )
+    
+    def save_npc_memory(self, memory: NPCMemoryRecord) -> None:
+        """Save or update NPC memory."""
+        memory.timestamp = datetime.now()
+        self.conn.execute(
+            """INSERT OR REPLACE INTO npc_memories 
+               (id, npc_name, relationship_score, interaction_summary, 
+                last_interaction_type, gifts_received, promises_kept, 
+                promises_broken, campaign_id, timestamp, memorable_events)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (memory.id, memory.npc_name, memory.relationship_score,
+             memory.interaction_summary, memory.last_interaction_type,
+             memory.gifts_received, memory.promises_kept, memory.promises_broken,
+             memory.campaign_id, memory.timestamp.isoformat(),
+             json.dumps(memory.memorable_events)),
+        )
+        self.conn.commit()
+    
+    def update_npc_memory(
+        self,
+        npc_name: str,
+        campaign_id: str,
+        relationship_delta: int = 0,
+        interaction_type: Optional[str] = None,
+        summary_addition: Optional[str] = None,
+        memorable_event: Optional[str] = None,
+        gift_given: bool = False,
+        promise_kept: bool = False,
+        promise_broken: bool = False,
+    ) -> NPCMemoryRecord:
+        """Update NPC memory with new interaction. Creates if doesn't exist."""
+        existing = self.get_npc_memory(npc_name)
+        
+        if existing:
+            # Update existing record
+            existing.relationship_score = max(-100, min(100, 
+                existing.relationship_score + relationship_delta))
+            existing.campaign_id = campaign_id
+            
+            if interaction_type:
+                existing.last_interaction_type = interaction_type
+            
+            if summary_addition:
+                if existing.interaction_summary:
+                    existing.interaction_summary = f"{existing.interaction_summary}; {summary_addition}"
+                else:
+                    existing.interaction_summary = summary_addition
+            
+            if memorable_event:
+                existing.memorable_events.append(memorable_event)
+                # Keep only last 10 memorable events
+                existing.memorable_events = existing.memorable_events[-10:]
+            
+            if gift_given:
+                existing.gifts_received += 1
+            if promise_kept:
+                existing.promises_kept += 1
+            if promise_broken:
+                existing.promises_broken += 1
+            
+            self.save_npc_memory(existing)
+            return existing
+        else:
+            # Create new record
+            memory = NPCMemoryRecord.create(
+                npc_name=npc_name,
+                campaign_id=campaign_id,
+                relationship_score=max(-100, min(100, relationship_delta)),
+                interaction_summary=summary_addition or "",
+                last_interaction_type=interaction_type or "neutral",
+            )
+            if memorable_event:
+                memory.memorable_events.append(memorable_event)
+            if gift_given:
+                memory.gifts_received = 1
+            if promise_kept:
+                memory.promises_kept = 1
+            if promise_broken:
+                memory.promises_broken = 1
+            
+            self.save_npc_memory(memory)
+            return memory
+    
+    def list_npc_memories(self, min_score: Optional[int] = None, limit: int = 100) -> list[NPCMemoryRecord]:
+        """List NPC memories, optionally filtered by minimum relationship score."""
+        if min_score is not None:
+            cursor = self.conn.execute(
+                "SELECT * FROM npc_memories WHERE relationship_score >= ? ORDER BY relationship_score DESC LIMIT ?",
+                (min_score, limit)
+            )
+        else:
+            cursor = self.conn.execute(
+                "SELECT * FROM npc_memories ORDER BY relationship_score DESC LIMIT ?",
+                (limit,)
+            )
+        return [
+            NPCMemoryRecord(
+                id=row["id"],
+                npc_name=row["npc_name"],
+                relationship_score=row["relationship_score"],
+                interaction_summary=row["interaction_summary"],
+                last_interaction_type=row["last_interaction_type"],
+                gifts_received=row["gifts_received"],
+                promises_kept=row["promises_kept"],
+                promises_broken=row["promises_broken"],
+                campaign_id=row["campaign_id"],
+                timestamp=datetime.fromisoformat(row["timestamp"]),
+                memorable_events=json.loads(row["memorable_events"]),
+            )
+            for row in cursor
+        ]
+    
+    def get_npc_memory_context(self, npc_name: str) -> str:
+        """Get memory context for LLM dialogue generation."""
+        memory = self.get_npc_memory(npc_name)
+        if memory is None:
+            return "No prior history with this player."
+        return memory.get_memory_context()
+    
+    def get_allies_and_enemies(self) -> tuple[list[str], list[str]]:
+        """Get lists of ally and enemy NPC names based on relationship scores."""
+        allies_cursor = self.conn.execute(
+            "SELECT npc_name FROM npc_memories WHERE relationship_score >= 25 ORDER BY relationship_score DESC"
+        )
+        enemies_cursor = self.conn.execute(
+            "SELECT npc_name FROM npc_memories WHERE relationship_score <= -25 ORDER BY relationship_score ASC"
+        )
+        allies = [row["npc_name"] for row in allies_cursor]
+        enemies = [row["npc_name"] for row in enemies_cursor]
+        return allies, enemies
+    
     def get_world_history_summary(self, limit: int = 10) -> str:
         """Get a summary of recent world history for LLM context."""
         events = self.list_world_events(limit=limit)
         deaths = self.list_npc_deaths(limit=5)
         factions = self.list_faction_standings()
+        allies, enemies = self.get_allies_and_enemies()
         
         summary_parts = []
         
@@ -409,6 +677,12 @@ class WorldStateDB:
                     status = "hostile"
                 summary_parts.append(f"- {f.faction_name}: {status} ({f.standing:+d})")
         
+        if allies:
+            summary_parts.append(f"\nAllied NPCs: {', '.join(allies[:5])}")
+        
+        if enemies:
+            summary_parts.append(f"\nHostile NPCs: {', '.join(enemies[:5])}")
+        
         return "\n".join(summary_parts) if summary_parts else "No recorded world history."
     
     # === Export/Import ===
@@ -419,6 +693,7 @@ class WorldStateDB:
             "factions": [f.to_dict() for f in self.list_faction_standings()],
             "npc_deaths": [d.to_dict() for d in self.list_npc_deaths(limit=1000)],
             "world_events": [e.to_dict() for e in self.list_world_events(limit=1000)],
+            "npc_memories": [m.to_dict() for m in self.list_npc_memories(limit=1000)],
         }
     
     def import_all(self, data: dict) -> None:
@@ -435,6 +710,12 @@ class WorldStateDB:
         for e_data in data.get("world_events", []):
             event = WorldEvent.from_dict(e_data)
             self.record_world_event(event)
+        
+        for m_data in data.get("npc_memories", []):
+            memory = NPCMemoryRecord.from_dict(m_data)
+            # Only import if not already exists
+            if self.get_npc_memory(memory.npc_name) is None:
+                self.save_npc_memory(memory)
 
 
 def get_world_state_path() -> Path:

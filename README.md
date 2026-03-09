@@ -191,6 +191,22 @@ NPCs remember:
 
 Their disposition ranges from Hostile to Allied based on your actions.
 
+### Cross-Campaign Memory
+
+NPCs remember you across campaigns. Meet a merchant in one adventure, and they'll remember your relationship when you encounter them again:
+
+- **Relationship scores** persist (-100 to +100)
+- **Interaction history** is summarized for each NPC
+- **Memorable events** are tracked (betrayals, heroic acts, etc.)
+- **Promise tracking** - broken promises follow you
+
+The AI uses this history to generate appropriate dialogue. An NPC you saved will greet you warmly; one you cheated will be hostile.
+
+```bash
+# World history summary includes relationships
+reverie world-history
+```
+
 ## Persistent World State
 
 Your actions have consequences that persist across campaigns:
